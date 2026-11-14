@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Spending">
+<meta name="theme-color" content="#e8e8e3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>Spending</title>
+<style>
+  :root {
+    --bg: #e8e8e3; --tile: #f6f6f2; --text: #121212; --muted: #6b6b64; --line: #d4d4cc;
+    --dot-off: #dfdfd8; --dot-on: #121212; --red: #d7261e; --grid: rgba(0,0,0,.08);
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000; --tile: #0e0e0e; --text: #ededed; --muted: #808080; --line: #242424;
+      --dot-off: #1e1e1e; --dot-on: #f2f2f2; --red: #ff3b30; --grid: rgba(255,255,255,.07);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; background: var(--bg); }
+  body {
+    margin: 0 auto; max-width: 560px; color: var(--text); font: 15px/1.35 var(--mono);
+    background: var(--bg) radial-gradient(circle, var(--grid) 1px, transparent 1.6px) 0 0 / 12px 12px;
+    min-height: 100vh;
+    padding: calc(env(safe-area-inset-top) + 10px) calc(env(safe-area-inset-right) + 14px)
+             calc(env(safe-area-inset-bottom) + 28px) calc(env(safe-area-inset-left) + 14px);
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+  /* dot-matrix rendering */
+  .dots { display: block; }
+  .dots .off { fill: var(--dot-off); }
+  .dots .on  { fill: var(--dot-on); }
+  .dots .red { fill: var(--red); }
+  .over .dots .on { fill: var(--red); }
+
+  header { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 14px; }
+  #month svg { height: 22px; width: auto; }
+  .nav { width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 50%;
+         background: var(--tile); font-size: 20px; line-height: 1; }
+  .nav:disabled { opacity: .3; cursor: default; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tile { background: var(--tile); border: 1px solid var(--line); border-radius: 22px; padding: 14px 16px 16px;
+          min-width: 0; }
+  .span { grid-column: 1 / -1; }
+  .lbl { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+         display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .lbl i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--red); margin-right: 8px;
+           vertical-align: 1px; }
+  .small { display: flex; flex-direction: column; justify-content: space-between; min-height: 112px; text-align: left; }
+  .val { font-size: 24px; font-weight: 500; letter-spacing: -.03em; font-variant-numeric: tabular-nums;
+         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .val.red { color: var(--red); }
+  .hint { font-size: 10px; letter-spacing: .14em; color: var(--muted); }
+  .daysrow { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
+  #cal svg { width: 58px; height: auto; }
+
+  #hero { display: block; width: 100%; text-align: left; }
+  #big svg { width: 100%; height: auto; margin: 18px 0 14px; }
+  #meter svg { width: 100%; height: auto; }
+
+  form { display: grid; gap: 10px; }
+  .typerow { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  input {
+    font: 500 16px var(--mono); color: var(--text); background: transparent; border: 1px solid var(--line);
+    border-radius: 12px; padding: 11px 12px; width: 100%; min-width: 0; min-height: 46px;
+    -webkit-appearance: none; appearance: none;
+  }
+  input::placeholder { color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 13px; }
+  input:focus { outline: none; border-color: var(--text); }
+  input[type=date]::-webkit-date-and-time-value { text-align: left; }
+  .add { background: var(--text); color: var(--bg); font-weight: 700; font-size: 13px; letter-spacing: .2em;
+         border-radius: 12px; min-height: 48px; text-transform: uppercase; }
+  .add:active { opacity: .75; }
+
+  .icon { width: 40px; height: 40px; flex: none; padding: 6px; border-radius: 11px; background: var(--bg);
+          border: 1px solid var(--line); }
+  .icon svg { width: 100%; height: 100%; }
+
+  ul { list-style: none; margin: 8px 0 0; padding: 0; }
+  li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--line); }
+  li:first-child { border-top: 0; }
+  .what { flex: 1; min-width: 0; }
+  .type { font-weight: 500; text-transform: uppercase; letter-spacing: .04em;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .date { color: var(--muted); font-size: 11px; letter-spacing: .1em; margin-top: 2px; }
+  .amt { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .del { color: var(--muted); font-size: 20px; width: 34px; height: 40px; flex: none; }
+  #empty { color: var(--muted); font-size: 11px; letter-spacing: .14em; padding: 18px 0 4px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <button id="prev" class="nav" aria-label="Previous month">‹</button>
+  <div id="month" role="heading" aria-level="1"></div>
+  <button id="next" class="nav" aria-label="Next month">›</button>
+</header>
+
+<main class="grid">
+  <button id="hero" class="tile span">
+    <div class="lbl"><span><i></i>Remaining</span><span id="pct"></span></div>
+    <div id="big"></div>
+    <div id="meter"></div>
+  </button>
+
+  <div class="tile small">
+    <div class="lbl">Spent</div>
+    <div id="spentv" class="val"></div>
+  </div>
+  <button id="budgetbtn" class="tile small">
+    <div class="lbl"><span>Budget</span><span class="hint">EDIT</span></div>
+    <div id="budgetv" class="val"></div>
+  </button>
+  <div class="tile small">
+    <div class="lbl">Days left</div>
+    <div class="daysrow"><div id="daysv" class="val"></div><div id="cal"></div></div>
+  </div>
+  <div class="tile small">
+    <div class="lbl">Per day</div>
+    <div id="perdayv" class="val"></div>
+  </div>
+
+  <form id="add" class="tile span" autocomplete="off">
+    <div class="lbl">New entry</div>
+    <div class="typerow">
+      <div id="preview" class="icon"></div>
+      <input id="type" list="types" placeholder="Item type" enterkeyhint="next" required>
+    </div>
+    <datalist id="types"></datalist>
+    <div class="row">
+      <input id="cost" inputmode="decimal" placeholder="Cost" enterkeyhint="done" required>
+      <input id="date" type="date" required>
+    </div>
+    <button type="submit" class="add">Add entry +</button>
+  </form>
+
+  <section class="tile span">
+    <div class="lbl"><span>Log</span><span id="count"></span></div>
+    <ul id="list"></ul>
+    <div id="empty">NO ENTRIES</div>
+  </section>
+</main>
+
+<script>
+// Change this to your currency symbol.
+const CURRENCY = '$';
+
+const KEY = 'spending-v1';
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, '0');
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const thisMonth = () => todayStr().slice(0, 7);
+const MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const DOW = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+/* ---------- 5x7 dot-matrix font ---------- */
+const FONT_SRC = {
+  '0':'01110 10001 10011 10101 11001 10001 01110', '1':'00100 01100 00100 00100 00100 00100 01110',
+  '2':'01110 10001 00001 00010 00100 01000 11111', '3':'11111 00010 00100 00010 00001 10001 01110',
+  '4':'00010 00110 01010 10010 11111 00010 00010', '5':'11111 10000 11110 00001 00001 10001 01110',
+  '6':'00110 01000 10000 11110 10001 10001 01110', '7':'11111 00001 00010 00100 01000 01000 01000',
+  '8':'01110 10001 10001 01110 10001 10001 01110', '9':'01110 10001 10001 01111 00001 00010 01100',
+  'A':'01110 10001 10001 11111 10001 10001 10001', 'B':'11110 10001 10001 11110 10001 10001 11110',
+  'C':'01110 10001 10000 10000 10000 10001 01110', 'D':'11100 10010 10001 10001 10001 10010 11100',
+  'E':'11111 10000 10000 11110 10000 10000 11111', 'F':'11111 10000 10000 11110 10000 10000 10000',
+  'G':'01110 10001 10000 10111 10001 10001 01111', 'H':'10001 10001 10001 11111 10001 10001 10001',
+  'I':'01110 00100 00100 00100 00100 00100 01110', 'J':'00111 00010 00010 00010 00010 10010 01100',
+  'K':'10001 10010 10100 11000 10100 10010 10001', 'L':'10000 10000 10000 10000 10000 10000 11111',
+  'M':'10001 11011 10101 10101 10001 10001 10001', 'N':'10001 10001 11001 10101 10011 10001 10001',
+  'O':'01110 10001 10001 10001 10001 10001 01110', 'P':'11110 10001 10001 11110 10000 10000 10000',
+  'Q':'01110 10001 10001 10001 10101 10010 01101', 'R':'11110 10001 10001 11110 10100 10010 10001',
+  'S':'01111 10000 10000 01110 00001 00001 11110', 'T':'11111 00100 00100 00100 00100 00100 00100',
+  'U':'10001 10001 10001 10001 10001 10001 01110', 'V':'10001 10001 10001 10001 10001 01010 00100',
+  'W':'10001 10001 10001 10101 10101 10101 01010', 'X':'10001 10001 01010 00100 01010 10001 10001',
+  'Y':'10001 10001 10001 01010 00100 00100 00100', 'Z':'11111 00001 00010 00100 01000 10000 11111',
+  '$':'00100 01111 10100 01110 00101 11110 00100', '-':'0000 0000 0000 1111 0000 0000 0000',
+  '.':'00 00 00 00 00 11 11', ',':'00 00 00 00 00 01 10', ' ':'000 000 000 000 000 000 000',
+};
+const FONT = Object.fromEntries(Object.entries(FONT_SRC).map(([k, v]) =>
+  [k, v.split(' ').map(r => r.replace(/1/g, '#').replace(/0/g, '.'))]));
+
+// Rows of characters -> SVG. '#' lit, 'r' red, '.' unlit, ' ' nothing.
+function dots(rows) {
+  const h = rows.length, w = Math.max(...rows.map(r => r.length));
+  let s = `<svg class="dots" viewBox="0 0 ${w} ${h}" aria-hidden="true">`;
+  rows.forEach((r, y) => {
+    for (let x = 0; x < r.length; x++) {
+      const c = r[x];
+      if (c === ' ') continue;
+      s += `<circle cx="${x + .5}" cy="${y + .5}" r=".4" class="${c === '#' ? 'on' : c === 'r' ? 'red' : 'off'}"/>`;
+    }
+  });
+  return s + '</svg>';
+}
+function textRows(str, padX = 1, padY = 1) {
+  const glyphs = [...String(str).toUpperCase()].map(ch => FONT[ch === '−' ? '-' : ch] || FONT[' ']);
+  const rows = Array.from({ length: 7 }, (_, y) => glyphs.map(g => g[y]).join('.'));
+  const side = '.'.repeat(padX), blank = '.'.repeat(rows[0].length + 2 * padX);
+  return [...Array(padY).fill(blank), ...rows.map(r => side + r + side), ...Array(padY).fill(blank)];
+}
+
+/* ---------- 9x9 item icons, picked automatically from the item type ---------- */
+const ICONS = {
+  food:   ['.........','..#####..','.#######.','#########','.........','#########','.........','#########','.#######.'],
+  coffee: ['.#..#....','..#..#...','.#..#....','.........','#######..','#.....###','#.....#.#','#.....###','.#####...'],
+  drinks: ['.#####...','#######..','#.....###','#.#.#.#.#','#.#.#.#.#','#.#.#.###','#.#.#.#..','#.....#..','#######..'],
+  cart:   ['##.......','.#.......','.#######.','.#.....#.','.#.....#.','.#######.','.#.......','.######..','..#...#..'],
+  bag:    ['...###...','..#...#..','..#...#..','#########','#########','#########','#########','#########','#########'],
+  car:    ['.........','..#####..','.#..#..#.','#########','#########','#########','.##...##.','.##...##.','.........'],
+  movie:  ['#.#.#.#.#','#########','#.......#','#..#....#','#..##...#','#..###..#','#..##...#','#..#....#','#########'],
+  game:   ['.........','.#######.','##.###.##','#...#.#.#','##.###.##','#########','###...###','##.....##','.........'],
+  shirt:  ['..##.##..','.#######.','#########','#.#####.#','..#####..','..#####..','..#####..','..#####..','.........'],
+  health: ['.........','...###...','...###...','.#######.','.#######.','.#######.','...###...','...###...','.........'],
+  fitness:['.........','.........','##.....##','##.....##','#########','##.....##','##.....##','.........','.........'],
+  tech:   ['.........','..#####..','.#.....#.','#.......#','#.......#','###...###','###...###','###...###','.........'],
+  code:   ['#########','#.......#','#.#.....#','#..#....#','#.#.###.#','#.......#','#########','...###...','.#######.'],
+  home:   ['....#....','...###...','..#####..','.#######.','#########','.#######.','.##...##.','.##...##.','.##...##.'],
+  bolt:   ['.....##..','....##...','...##....','..######.','.....##..','....##...','...##....','..##.....','.#.......'],
+  blank:  Array(9).fill('.........'),
+};
+// First match wins, so more specific rules come first.
+const RULES = [
+  ['bolt',    /electric|power bill|utilit|internet|wi-?fi|spectrum|comcast|xfinity|verizon|at&t|t-mobile|phone bill|water bill|gas bill/],
+  ['coffee',  /coffee|latte|espresso|caf[eé]|starbucks|dunkin|\btea\b|boba/],
+  ['drinks',  /beer|\bbars?\b|wine|drinks?\b|cocktail|liquor|\bpub\b|brewery/],
+  ['cart',    /grocer|supermarket|aldi|trader joe|whole foods|kroger|costco|wegmans|publix|safeway|market/],
+  ['health',  /pharm|\bcvs\b|walgreens|doctor|dentist|dental|medic|health|hospital|clinic|copay|prescription|\bpt\b|therap|wart|skin|derm|vitamin|\bpills?\b|urgent care|optom|glasses|contacts/],
+  ['fitness', /\bgym\b|fitness|yoga|climb|workout|protein|peloton|pilates/],
+  ['game',    /game|\bgta\b|steam|xbox|playstation|\bps[45]\b|nintendo|arcade/],
+  ['movie',   /movie|cinema|film|theat(er|re)|netflix|hulu|disney|hbo|concert|ticket|museum/],
+  ['food',    /food|diner|lunch|dinner|breakfast|brunch|restaurant|pizza|burger|taco|sushi|take-?out|doordash|uber ?eats|grubhub|chipotle|mcdonald|snack|\beat|bagel|sandwich|ramen|wings/],
+  ['shirt',   /shirt|costume|cloth|dress|pants|jeans|shoes?\b|sneaker|jacket|hoodie|socks?\b|apparel|uniqlo|zara|h&m/],
+  ['code',    /claude|chatgpt|openai|subscription|software|\bapps?\b|icloud|google one|adobe|github|domain|hosting|patreon|youtube|cloud/],
+  ['tech',    /headphone|airpods|earbud|speaker|audio|music|spotify|cable|charger|phone|laptop|computer|\btech\b|electronic|keyboard|mouse|monitor/],
+  ['car',     /\bgas\b|fuel|uber|lyft|taxi|\bcar\b|parking|toll|tires?\b|oil change|mechanic|transit|metro|subway|\bbus\b|train|registration/],
+  ['home',    /\brent\b|mortgage|home|furniture|decor|apartment|clean|laundry|insurance|hardware|lowe'?s/],
+  ['bag',     /target|amazon|walmart|shop|store|mall|ikea|best buy|gift|order/],
+];
+const iconCache = new Map();
+function iconFor(type) {
+  const s = type.toLowerCase().trim();
+  if (iconCache.has(s)) return iconCache.get(s);
+  let rows = null;
+  for (const [k, re] of RULES) if (re.test(s)) { rows = ICONS[k]; break; }
+  if (!rows) {
+    // No match: show the item's first letter.
+    const ch = (s.match(/[a-z0-9]/) || [])[0];
+    rows = ICONS.blank;
+    if (ch) {
+      const g = FONT[ch.toUpperCase()], grid = ICONS.blank.map(r => r.split(''));
+      g.forEach((line, y) => [...line].forEach((c, x) => { if (c === '#') grid[y + 1][x + 2] = '#'; }));
+      rows = grid.map(r => r.join(''));
+    }
+  }
+  const svg = dots(rows);
+  iconCache.set(s, svg);
+  return svg;
+}
+
+/* ---------- data (amounts in cents; budgets maps "YYYY-MM" -> cents) ---------- */
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if (d && Array.isArray(d.entries)) return d;
+  } catch {}
+  return { entries: [], budgets: {}, defaultBudget: null };
+}
+let db = load();
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch {} };
+navigator.storage?.persist?.();
+
+let view = thisMonth();
+
+function money(c) {
+  return (c < 0 ? '−' : '') + CURRENCY +
+    (Math.abs(c) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function parseMoney(s) {
+  s = String(s).trim();
+  if (/,\d{1,2}$/.test(s) && !s.includes('.')) s = s.replace(',', '.'); // "12,50"
+  s = s.replace(/[^\d.\-]/g, '');
+  return Math.round(parseFloat(s) * 100);
+}
+function shiftMonth(m, d) {
+  const [y, mo] = m.split('-').map(Number);
+  const dt = new Date(y, mo - 1 + d, 1);
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}`;
+}
+function monthLabel(m) {
+  const [y, mo] = m.split('-').map(Number);
+  return new Date(y, mo - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+function dayLabel(s) {
+  const [y, mo, d] = s.split('-').map(Number);
+  return `${DOW[new Date(y, mo - 1, d).getDay()]} ${pad(d)} ${MON[mo - 1]}`;
+}
+const budgetFor = m => (m in db.budgets ? db.budgets[m] : db.defaultBudget);
+
+function meter(frac, over) {
+  const N = 40, n = over ? N : Math.round(Math.min(1, Math.max(0, frac)) * N);
+  const row = (over ? 'r' : '#').repeat(n) + '.'.repeat(N - n);
+  $('meter').innerHTML = dots([row, row]);
+}
+
+function render() {
+  const cur = thisMonth();
+  // Lock in the current month's budget so later changes don't rewrite history.
+  if (view === cur && !(cur in db.budgets) && db.defaultBudget != null) { db.budgets[cur] = db.defaultBudget; save(); }
+
+  const [y, mo] = view.split('-').map(Number);
+  $('month').innerHTML = dots(textRows(`${MON[mo - 1]} ${y}`, 0, 0));
+  $('month').setAttribute('aria-label', monthLabel(view));
+  $('next').disabled = view >= cur;
+
+  const items = db.entries.filter(e => e.date.startsWith(view))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  const spent = items.reduce((s, e) => s + e.cost, 0);
+  const budget = budgetFor(view);
+  const left = budget == null ? null : budget - spent;
+
+  // Hero: remaining, in dot-matrix
+  const big = $('big');
+  if (budget == null) {
+    big.innerHTML = dots(textRows('SET BUDGET'));
+    big.className = '';
+    $('pct').textContent = 'TAP';
+    meter(0, false);
+  } else {
+    big.innerHTML = dots(textRows(money(left)));
+    big.className = left < 0 ? 'over' : '';
+    const frac = budget > 0 ? spent / budget : (spent > 0 ? 1 : 0);
+    $('pct').textContent = `${Math.round(frac * 100)}% USED`;
+    meter(frac, left < 0);
+  }
+  $('hero').setAttribute('aria-label', budget == null ? 'Set monthly budget' : `${money(left)} left`);
+
+  $('spentv').textContent = money(spent);
+  $('budgetv').textContent = budget == null ? '—' : money(budget);
+
+  // Days left + mini calendar (elapsed days lit, today red)
+  const dim = new Date(y, mo, 0).getDate(), isCur = view === cur, today = new Date().getDate();
+  const daysLeft = isCur ? dim - today + 1 : 0;
+  $('daysv').textContent = String(daysLeft);
+  let cal = '';
+  for (let d = 1; d <= dim; d++) cal += !isCur || d < today ? '#' : d === today ? 'r' : '.';
+  $('cal').innerHTML = dots(cal.match(/.{1,7}/g).map(r => r.padEnd(7, ' ')));
+
+  const pv = $('perdayv');
+  if (isCur && left != null) {
+    pv.textContent = money(Math.max(0, Math.floor(left / daysLeft)));
+    pv.className = 'val' + (left < 0 ? ' red' : '');
+  } else { pv.textContent = '—'; pv.className = 'val'; }
+
+  // Log
+  $('count').textContent = `${items.length} ITEM${items.length === 1 ? '' : 'S'}`;
+  $('list').replaceChildren(...items.map(e => {
+    const li = document.createElement('li');
+    const ic = document.createElement('div'); ic.className = 'icon'; ic.innerHTML = iconFor(e.type);
+    const what = document.createElement('div'); what.className = 'what';
+    const t = document.createElement('div'); t.className = 'type'; t.textContent = e.type;
+    const d = document.createElement('div'); d.className = 'date'; d.textContent = dayLabel(e.date);
+    what.append(t, d);
+    const a = document.createElement('div'); a.className = 'amt'; a.textContent = money(e.cost);
+    const x = document.createElement('button'); x.className = 'del'; x.textContent = '×';
+    x.setAttribute('aria-label', `Delete ${e.type}`);
+    x.onclick = () => {
+      if (!confirm(`Delete ${e.type} (${money(e.cost)})?`)) return;
+      db.entries = db.entries.filter(z => z.id !== e.id); save(); render();
+    };
+    li.append(ic, what, a, x);
+    return li;
+  }));
+  $('empty').style.display = items.length ? 'none' : '';
+
+  // Suggest previously used item types, most recent first.
+  const seen = new Set();
+  [...db.entries].sort((a, b) => b.id - a.id).forEach(e => seen.add(e.type));
+  $('types').replaceChildren(...[...seen].slice(0, 40).map(v => { const o = document.createElement('option'); o.value = v; return o; }));
+
+  $('date').value = isCur ? todayStr() : `${view}-01`;
+  $('preview').innerHTML = iconFor($('type').value);
+}
+
+function editBudget() {
+  const b = budgetFor(view);
+  const v = prompt(`Budget for ${monthLabel(view)}`, b != null ? (b / 100).toFixed(2) : '');
+  if (v === null) return;
+  const c = parseMoney(v);
+  if (!Number.isFinite(c) || c < 0) { alert('Please enter a number.'); return; }
+  db.budgets[view] = c;
+  if (view >= thisMonth()) db.defaultBudget = c; // carries forward to future months
+  save(); render();
+}
+
+$('budgetbtn').onclick = editBudget;
+$('hero').onclick = () => { if (budgetFor(view) == null) editBudget(); };
+$('prev').onclick = () => { view = shiftMonth(view, -1); render(); };
+$('next').onclick = () => { view = shiftMonth(view, 1); render(); };
+$('type').addEventListener('input', () => { $('preview').innerHTML = iconFor($('type').value); });
+
+$('add').addEventListener('submit', ev => {
+  ev.preventDefault();
+  const type = $('type').value.trim();
+  const cost = parseMoney($('cost').value);
+  if (!type) return $('type').focus();
+  if (!Number.isFinite(cost) || cost === 0) return $('cost').focus();
+  const date = $('date').value || todayStr();
+  db.entries.push({ id: Date.now(), type, cost, date });
+  save();
+  view = date.slice(0, 7);
+  $('type').value = ''; $('cost').value = '';
+  document.activeElement?.blur();
+  render();
+});
+
+// Roll over to the new month if the app is reopened after midnight.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+render();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
