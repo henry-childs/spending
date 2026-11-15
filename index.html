@@ -43,11 +43,36 @@
   .dots .red { fill: var(--red); }
   .over .dots .on { fill: var(--red); }
 
-  header { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 14px; }
+  header { display: flex; align-items: center; justify-content: space-between; min-height: 44px; margin: 2px 0 12px; }
+  #monthbtn { display: flex; align-items: center; gap: 12px; padding: 10px 4px 10px 2px; }
   #month svg { height: 22px; width: auto; }
-  .nav { width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 50%;
-         background: var(--tile); font-size: 20px; line-height: 1; }
-  .nav:disabled { opacity: .3; cursor: default; }
+  #caret svg { width: 18px; height: auto; transition: transform .2s; }
+  #monthbtn[aria-expanded=true] #caret svg { transform: rotate(180deg); }
+  .chip { border: 1px solid var(--line); background: var(--tile); border-radius: 999px; padding: 10px 14px;
+          font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+
+  #picker { margin: 0 0 10px; }
+  .years { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .years button { font-size: 12px; font-weight: 600; letter-spacing: .12em; padding: 7px 13px;
+                  border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .years button.sel { color: var(--text); border-color: var(--text); }
+  .months { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .mt { border: 1px solid var(--line); border-radius: 14px; padding: 10px 10px 11px; text-align: left;
+        display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .mt .mn { font-size: 11px; font-weight: 600; letter-spacing: .14em; }
+  .mt .ms { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mt .dots { width: 100%; height: auto; }
+  .mt.sel { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+  .mt.now { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .mt.now .dots .on { fill: var(--bg); }
+  .mt.now .dots .off { fill: rgba(128,128,128,.4); }
+  .mt:disabled { opacity: .35; cursor: default; }
+
+  .datarow { margin-top: 12px; }
+  .ghost { border: 1px solid var(--line); border-radius: 12px; min-height: 46px; font-size: 12px; font-weight: 600;
+           letter-spacing: .16em; text-transform: uppercase; }
+  .ghost:active { background: var(--text); color: var(--bg); }
 
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .tile { background: var(--tile); border: 1px solid var(--line); border-radius: 22px; padding: 14px 16px 16px;
@@ -116,10 +141,16 @@
 </head>
 <body>
 <header>
-  <button id="prev" class="nav" aria-label="Previous month">‹</button>
-  <div id="month" role="heading" aria-level="1"></div>
-  <button id="next" class="nav" aria-label="Next month">›</button>
+  <button id="monthbtn" aria-expanded="false" aria-controls="picker">
+    <span id="month" role="heading" aria-level="1"></span><span id="caret"></span>
+  </button>
+  <button id="nowbtn" class="chip" hidden>This month</button>
 </header>
+
+<section id="picker" class="tile" hidden>
+  <div id="years" class="years"></div>
+  <div id="months" class="months"></div>
+</section>
 
 <main class="grid">
   <button id="hero" class="tile span">
@@ -191,6 +222,15 @@
     <div class="lbl"><span>Log</span><span id="count"></span></div>
     <ul id="list"></ul>
     <div id="empty">NO ENTRIES</div>
+  </section>
+
+  <section class="tile span">
+    <div class="lbl">Data</div>
+    <div class="row datarow">
+      <button id="backupbtn" class="ghost">Backup</button>
+      <button id="restorebtn" class="ghost">Restore</button>
+    </div>
+    <p class="plannote">Backup gives you a code to save somewhere safe, like Notes. Restore replaces everything in the app with a saved code.</p>
   </section>
 </main>
 
@@ -343,11 +383,6 @@ function parseMoney(s) {
   s = s.replace(/[^\d.\-]/g, '');
   return Math.round(parseFloat(s) * 100);
 }
-function shiftMonth(m, d) {
-  const [y, mo] = m.split('-').map(Number);
-  const dt = new Date(y, mo - 1 + d, 1);
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}`;
-}
 function monthLabel(m) {
   const [y, mo] = m.split('-').map(Number);
   return new Date(y, mo - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -389,7 +424,8 @@ function render() {
   const [y, mo] = view.split('-').map(Number);
   $('month').innerHTML = dots(textRows(`${MON[mo - 1]} ${y}`, 0, 0));
   $('month').setAttribute('aria-label', monthLabel(view));
-  $('next').disabled = view >= cur;
+  $('nowbtn').hidden = view === cur;
+  if (!$('picker').hidden) renderPicker();
 
   const items = db.entries.filter(e => e.date.startsWith(view))
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
@@ -525,8 +561,89 @@ $('plantoggle').onclick = () => setPlanOpen($('planedit').hidden);
 
 $('budgetbtn').onclick = openPlan;
 $('hero').onclick = () => { if (budgetFor(view) == null) openPlan(); };
-$('prev').onclick = () => { view = shiftMonth(view, -1); render(); };
-$('next').onclick = () => { view = shiftMonth(view, 1); render(); };
+/* ---------- month picker: the year as 12 tiles with spent + budget meter ---------- */
+let pickYear = +thisMonth().slice(0, 4);
+const shortMoney = c => (c < 0 ? '−' : '') + CURRENCY + Math.round(Math.abs(c) / 100).toLocaleString('en-US');
+function pickerYears() {
+  const ys = new Set([+thisMonth().slice(0, 4), pickYear]);
+  db.entries.forEach(e => ys.add(+e.date.slice(0, 4)));
+  Object.keys(db.plans).forEach(m => ys.add(+m.slice(0, 4)));
+  return [...ys].sort((a, b) => a - b);
+}
+function renderPicker() {
+  const cur = thisMonth();
+  $('years').replaceChildren(...pickerYears().map(y => {
+    const b = document.createElement('button');
+    b.textContent = y; b.className = y === pickYear ? 'sel' : '';
+    b.onclick = () => { pickYear = y; renderPicker(); };
+    return b;
+  }));
+  $('months').replaceChildren(...MON.map((name, i) => {
+    const m = `${pickYear}-${pad(i + 1)}`;
+    const items = db.entries.filter(e => e.date.startsWith(m));
+    const spent = items.reduce((s, e) => s + e.cost, 0);
+    const future = m > cur && !items.length;
+    const budget = future ? null : budgetFor(m);
+    const over = budget != null && spent > budget;
+    const N = 8;
+    const lit = budget == null ? 0 : over ? N : Math.round(Math.min(1, budget > 0 ? spent / budget : 0) * N);
+    const b = document.createElement('button');
+    b.className = 'mt' + (m === cur ? ' now' : '') + (m === view ? ' sel' : '');
+    b.disabled = future;
+    const n = document.createElement('div'); n.className = 'mn'; n.textContent = name;
+    const s = document.createElement('div'); s.className = 'ms';
+    s.textContent = future ? '·' : items.length ? shortMoney(spent) : '—';
+    const meter = document.createElement('div');
+    meter.innerHTML = dots([(over ? 'r' : '#').repeat(lit) + '.'.repeat(N - lit)]);
+    b.append(n, s, meter);
+    b.setAttribute('aria-label', `${monthLabel(m)}, spent ${money(spent)}`);
+    b.onclick = () => { view = m; setPicker(false); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    return b;
+  }));
+}
+function setPicker(open) {
+  $('picker').hidden = !open;
+  $('monthbtn').setAttribute('aria-expanded', String(open));
+  if (open) { pickYear = +view.slice(0, 4); renderPicker(); }
+}
+$('caret').innerHTML = dots(['#####', ' ### ', '  #  ']);
+$('monthbtn').onclick = () => setPicker($('picker').hidden);
+$('nowbtn').onclick = () => { view = thisMonth(); setPicker(false); render(); };
+
+/* ---------- backup / restore ---------- */
+const BACKUP_PREFIX = 'SPENDING1:';
+function backupCode() {
+  const json = JSON.stringify({ v: 1, at: new Date().toISOString(), db });
+  return BACKUP_PREFIX + btoa(unescape(encodeURIComponent(json))); // base64 so Notes can't mangle quotes
+}
+$('backupbtn').onclick = async () => {
+  const code = backupCode();
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Spending backup', text: code }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(code); alert('Backup code copied. Paste it somewhere safe, like Notes.'); }
+  catch { prompt('Copy this backup code:', code); }
+};
+$('restorebtn').onclick = () => {
+  const raw = prompt('Paste your backup code');
+  if (!raw) return;
+  let data;
+  try {
+    const s = raw.replace(/\s+/g, '');
+    if (!s.startsWith(BACKUP_PREFIX)) throw new Error();
+    data = JSON.parse(decodeURIComponent(escape(atob(s.slice(BACKUP_PREFIX.length)))));
+    if (!data.db || !Array.isArray(data.db.entries)) throw new Error();
+  } catch { alert("That doesn't look like a Spending backup code."); return; }
+  const when = data.at ? new Date(data.at).toLocaleString() : 'an unknown date';
+  if (!confirm(`Replace everything in the app with the backup from ${when} (${data.db.entries.length} entries)?`)) return;
+  db = data.db;
+  db.budgets ??= {}; db.plan ??= emptyPlan(); db.plans ??= {};
+  save();
+  view = thisMonth();
+  render();
+  alert('Backup restored.');
+};
 $('type').addEventListener('input', () => { $('preview').innerHTML = iconFor($('type').value); });
 
 $('add').addEventListener('submit', ev => {

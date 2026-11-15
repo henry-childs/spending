@@ -5,7 +5,8 @@ Bare-bones monthly spending tracker for iPhone (installable web app, dot-matrix 
 - Enter item type + cost (date defaults to today). Each item gets a dot-matrix icon picked from its type.
 - Monthly plan: recurring income and fixed expenses; income − fixed = that month's budget. It carries into each new month; editing a past month changes only that month.
 - Shows how much is left of the budget, days left and a per-day allowance.
-- ‹ › to look at past months. × to delete an entry.
+- Tap the month name for the year grid (spent + budget meter per month); tap a month to open it. × deletes an entry.
+- Data → Backup gives a code to save (e.g. in Notes); Restore pastes it back, e.g. after re-adding the app.
 - Data is stored only on the device (localStorage); nothing is sent anywhere. Currency symbol: `CURRENCY` at the top of the script in `index.html`.
 - Icon keywords live in `RULES` in `index.html`; unmatched items show their first letter.
 
