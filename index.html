@@ -97,6 +97,20 @@
   .date { color: var(--muted); font-size: 11px; letter-spacing: .1em; margin-top: 2px; }
   .amt { font-variant-numeric: tabular-nums; font-weight: 500; }
   .del { color: var(--muted); font-size: 20px; width: 34px; height: 40px; flex: none; }
+  [hidden] { display: none !important; }
+  #plantoggle { width: 100%; padding: 2px 0; }
+  .plansum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .plansum .k { font-size: 10px; letter-spacing: .14em; color: var(--muted); }
+  .plansum .v { font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; margin-top: 4px;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .plansum .v.red { color: var(--red); }
+  .sect { font-size: 10px; letter-spacing: .14em; color: var(--muted); margin: 22px 0 0;
+          display: flex; justify-content: space-between; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .edit { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; }
+  .addline { display: grid; grid-template-columns: 1fr 104px 46px; gap: 8px; margin-top: 8px; }
+  .addline button { border: 1px solid var(--line); border-radius: 12px; font-size: 20px; }
+  .addline button:active { background: var(--text); color: var(--bg); }
+  .plannote { font-size: 11px; color: var(--muted); letter-spacing: .03em; line-height: 1.5; margin: 16px 0 0; }
   #empty { color: var(--muted); font-size: 11px; letter-spacing: .14em; padding: 18px 0 4px; text-align: center; }
 </style>
 </head>
@@ -119,7 +133,7 @@
     <div id="spentv" class="val"></div>
   </div>
   <button id="budgetbtn" class="tile small">
-    <div class="lbl"><span>Budget</span><span class="hint">EDIT</span></div>
+    <div class="lbl"><span>Budget</span><span class="hint">PLAN</span></div>
     <div id="budgetv" class="val"></div>
   </button>
   <div class="tile small">
@@ -130,6 +144,34 @@
     <div class="lbl">Per day</div>
     <div id="perdayv" class="val"></div>
   </div>
+
+  <section id="plan" class="tile span">
+    <button id="plantoggle" class="lbl" aria-expanded="false" aria-controls="planedit">
+      <span>Monthly plan</span><span id="planhint" class="hint">EDIT</span>
+    </button>
+    <div class="plansum">
+      <div><div class="k">INCOME</div><div id="inv" class="v"></div></div>
+      <div><div class="k">FIXED</div><div id="outv" class="v"></div></div>
+      <div><div class="k">AVAILABLE</div><div id="availv" class="v"></div></div>
+    </div>
+    <div id="planedit" hidden>
+      <div class="sect"><span>INCOME</span><span id="incTotal"></span></div>
+      <ul id="incList"></ul>
+      <form class="addline" data-kind="income" autocomplete="off">
+        <input name="label" placeholder="Source" enterkeyhint="next" required>
+        <input name="amt" inputmode="decimal" placeholder="Amount" enterkeyhint="done" required>
+        <button aria-label="Add income">+</button>
+      </form>
+      <div class="sect"><span>FIXED EXPENSES</span><span id="expTotal"></span></div>
+      <ul id="expList"></ul>
+      <form class="addline" data-kind="expenses" autocomplete="off">
+        <input name="label" placeholder="Expense" enterkeyhint="next" required>
+        <input name="amt" inputmode="decimal" placeholder="Amount" enterkeyhint="done" required>
+        <button aria-label="Add fixed expense">+</button>
+      </form>
+      <p id="plannote" class="plannote"></p>
+    </div>
+  </section>
 
   <form id="add" class="tile span" autocomplete="off">
     <div class="lbl">New entry</div>
@@ -227,6 +269,7 @@ const ICONS = {
   code:   ['#########','#.......#','#.#.....#','#..#....#','#.#.###.#','#.......#','#########','...###...','.#######.'],
   home:   ['....#....','...###...','..#####..','.#######.','#########','.#######.','.##...##.','.##...##.','.##...##.'],
   bolt:   ['.....##..','....##...','...##....','..######.','.....##..','....##...','...##....','..##.....','.#.......'],
+  income: ['....#....','...###...','..#.#.#..','.#..#..#.','....#....','....#....','....#....','....#....','.........'],
   blank:  Array(9).fill('.........'),
 };
 // First match wins, so more specific rules come first.
@@ -268,13 +311,21 @@ function iconFor(type) {
   return svg;
 }
 
-/* ---------- data (amounts in cents; budgets maps "YYYY-MM" -> cents) ---------- */
+/* ---------- data ----------
+   Amounts are in cents.
+   plan:  the recurring income / fixed expenses, carried into each new month.
+   plans: "YYYY-MM" -> that month's own copy, so changing the plan later
+          doesn't rewrite past months.
+   budgets / defaultBudget: older manual budget, used only while the plan is empty. */
+function emptyPlan() { return { income: [], expenses: [] }; }
 function load() {
-  try {
-    const d = JSON.parse(localStorage.getItem(KEY));
-    if (d && Array.isArray(d.entries)) return d;
-  } catch {}
-  return { entries: [], budgets: {}, defaultBudget: null };
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(KEY)); } catch {}
+  if (!d || !Array.isArray(d.entries)) d = { entries: [], budgets: {}, defaultBudget: null };
+  d.budgets ??= {};
+  d.plan ??= emptyPlan();
+  d.plans ??= {};
+  return d;
 }
 let db = load();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch {} };
@@ -305,7 +356,23 @@ function dayLabel(s) {
   const [y, mo, d] = s.split('-').map(Number);
   return `${DOW[new Date(y, mo - 1, d).getDay()]} ${pad(d)} ${MON[mo - 1]}`;
 }
-const budgetFor = m => (m in db.budgets ? db.budgets[m] : db.defaultBudget);
+const clone = o => JSON.parse(JSON.stringify(o));
+const total = list => list.reduce((s, x) => s + x.amount, 0);
+const hasItems = p => !!p && (p.income.length > 0 || p.expenses.length > 0);
+const planFor = m => db.plans[m] || (hasItems(db.plan) ? db.plan : null);
+function budgetFor(m) {
+  const p = planFor(m);
+  if (hasItems(p)) return total(p.income) - total(p.expenses);
+  return m in db.budgets ? db.budgets[m] : db.defaultBudget;
+}
+// Edits in the current month update the recurring plan (and so every later month);
+// edits while viewing a past month change only that month.
+function mutatePlan(fn) {
+  const cur = thisMonth();
+  if (view === cur) { fn(db.plan); db.plans[cur] = clone(db.plan); }
+  else { db.plans[view] ??= clone(planFor(view) || emptyPlan()); fn(db.plans[view]); }
+  save(); render();
+}
 
 function meter(frac, over) {
   const N = 40, n = over ? N : Math.round(Math.min(1, Math.max(0, frac)) * N);
@@ -317,6 +384,7 @@ function render() {
   const cur = thisMonth();
   // Lock in the current month's budget so later changes don't rewrite history.
   if (view === cur && !(cur in db.budgets) && db.defaultBudget != null) { db.budgets[cur] = db.defaultBudget; save(); }
+  if (view === cur && !db.plans[cur] && hasItems(db.plan)) { db.plans[cur] = clone(db.plan); save(); }
 
   const [y, mo] = view.split('-').map(Number);
   $('month').innerHTML = dots(textRows(`${MON[mo - 1]} ${y}`, 0, 0));
@@ -390,21 +458,73 @@ function render() {
 
   $('date').value = isCur ? todayStr() : `${view}-01`;
   $('preview').innerHTML = iconFor($('type').value);
+  renderPlan();
 }
 
-function editBudget() {
-  const b = budgetFor(view);
-  const v = prompt(`Budget for ${monthLabel(view)}`, b != null ? (b / 100).toFixed(2) : '');
-  if (v === null) return;
-  const c = parseMoney(v);
-  if (!Number.isFinite(c) || c < 0) { alert('Please enter a number.'); return; }
-  db.budgets[view] = c;
-  if (view >= thisMonth()) db.defaultBudget = c; // carries forward to future months
-  save(); render();
+/* ---------- monthly plan (income − fixed expenses = budget) ---------- */
+function renderPlan() {
+  const p = planFor(view) || emptyPlan();
+  const inc = total(p.income), exp = total(p.expenses), any = hasItems(p);
+  $('inv').textContent = any ? money(inc) : '—';
+  $('outv').textContent = any ? money(exp) : '—';
+  const av = $('availv');
+  av.textContent = any ? money(inc - exp) : '—';
+  av.className = 'v' + (any && inc < exp ? ' red' : '');
+  $('incTotal').textContent = money(inc);
+  $('expTotal').textContent = money(exp);
+  $('incList').replaceChildren(...p.income.map(it => planRow(it, 'income')));
+  $('expList').replaceChildren(...p.expenses.map(it => planRow(it, 'expenses')));
+  $('plannote').textContent = view === thisMonth()
+    ? 'Carries over to every new month. Available = income − fixed expenses, and becomes your budget. Tap an amount to change it. To set money aside, add a "Savings" expense.'
+    : `Changes here only affect ${monthLabel(view)}.`;
 }
+function planRow(it, kind) {
+  const li = document.createElement('li');
+  const b = document.createElement('button'); b.className = 'edit';
+  const ic = document.createElement('div'); ic.className = 'icon';
+  ic.innerHTML = kind === 'income' ? dots(ICONS.income) : iconFor(it.name);
+  const what = document.createElement('div'); what.className = 'what';
+  const t = document.createElement('div'); t.className = 'type'; t.textContent = it.name;
+  what.append(t);
+  const a = document.createElement('div'); a.className = 'amt'; a.textContent = money(it.amount);
+  b.append(ic, what, a);
+  b.setAttribute('aria-label', `Change ${it.name}, ${money(it.amount)} per month`);
+  b.onclick = () => {
+    const v = prompt(`${it.name} per month`, (it.amount / 100).toFixed(2));
+    if (v === null) return;
+    const c = parseMoney(v);
+    if (!Number.isFinite(c) || c < 0) { alert('Please enter a number.'); return; }
+    mutatePlan(p => { const x = p[kind].find(z => z.id === it.id); if (x) x.amount = c; });
+  };
+  const x = document.createElement('button'); x.className = 'del'; x.textContent = '×';
+  x.setAttribute('aria-label', `Remove ${it.name}`);
+  x.onclick = () => {
+    if (!confirm(`Remove ${it.name}?`)) return;
+    mutatePlan(p => { p[kind] = p[kind].filter(z => z.id !== it.id); });
+  };
+  li.append(b, x);
+  return li;
+}
+document.querySelectorAll('.addline').forEach(f => f.addEventListener('submit', ev => {
+  ev.preventDefault();
+  const nameEl = f.querySelector('[name=label]'), amtEl = f.querySelector('[name=amt]');
+  const name = nameEl.value.trim(), c = parseMoney(amtEl.value);
+  if (!name) return nameEl.focus();
+  if (!Number.isFinite(c) || c < 0) return amtEl.focus();
+  mutatePlan(p => p[f.dataset.kind].push({ id: Date.now() + Math.random(), name, amount: c }));
+  f.reset();
+  nameEl.focus();
+}));
+function setPlanOpen(open) {
+  $('planedit').hidden = !open;
+  $('plantoggle').setAttribute('aria-expanded', String(open));
+  $('planhint').textContent = open ? 'DONE' : 'EDIT';
+}
+function openPlan() { setPlanOpen(true); $('plan').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+$('plantoggle').onclick = () => setPlanOpen($('planedit').hidden);
 
-$('budgetbtn').onclick = editBudget;
-$('hero').onclick = () => { if (budgetFor(view) == null) editBudget(); };
+$('budgetbtn').onclick = openPlan;
+$('hero').onclick = () => { if (budgetFor(view) == null) openPlan(); };
 $('prev').onclick = () => { view = shiftMonth(view, -1); render(); };
 $('next').onclick = () => { view = shiftMonth(view, 1); render(); };
 $('type').addEventListener('input', () => { $('preview').innerHTML = iconFor($('type').value); });
