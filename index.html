@@ -16,13 +16,13 @@
 <style>
   :root {
     --bg: #e8e8e3; --tile: #f6f6f2; --text: #121212; --muted: #6b6b64; --line: #d4d4cc;
-    --dot-off: #dfdfd8; --dot-on: #121212; --red: #d7261e; --grid: rgba(0,0,0,.08);
+    --dot-off: #dfdfd8; --dot-on: #121212; --red: #d7261e; --green: #1f8f45; --grid: rgba(0,0,0,.08);
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #000; --tile: #0e0e0e; --text: #ededed; --muted: #808080; --line: #242424;
-      --dot-off: #1e1e1e; --dot-on: #f2f2f2; --red: #ff3b30; --grid: rgba(255,255,255,.07);
+      --dot-off: #1e1e1e; --dot-on: #f2f2f2; --red: #ff3b30; --green: #30d158; --grid: rgba(255,255,255,.07);
     }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -41,6 +41,8 @@
   .dots .off { fill: var(--dot-off); }
   .dots .on  { fill: var(--dot-on); }
   .dots .red { fill: var(--red); }
+  .dots .grn { fill: var(--green); }
+  #hero.ok .lbl i { background: var(--green); }
   .over .dots .on { fill: var(--red); }
 
   /* LED boot-up: lit dots switch on column by column with a quick flicker */
@@ -286,7 +288,7 @@ function dots(rows) {
     for (let x = 0; x < r.length; x++) {
       const c = r[x];
       if (c === ' ') continue;
-      s += `<circle cx="${x + .5}" cy="${y + .5}" r=".4" class="${c === '#' ? 'on' : c === 'r' ? 'red' : 'off'}"/>`;
+      s += `<circle cx="${x + .5}" cy="${y + .5}" r=".4" class="${c === '#' ? 'on' : c === 'r' ? 'red' : c === 'g' ? 'grn' : 'off'}"/>`;
     }
   });
   return s + '</svg>';
@@ -318,6 +320,8 @@ const ICONS = {
   code:   ['#########','#.......#','#.#.....#','#..#....#','#.#.###.#','#.......#','#########','...###...','.#######.'],
   home:   ['....#....','...###...','..#####..','.#######.','#########','.#######.','.##...##.','.##...##.','.##...##.'],
   bolt:   ['.....##..','....##...','...##....','..######.','.....##..','....##...','...##....','..##.....','.#.......'],
+  cloud:  ['...###...','.##...##.','#.......#','#.......#','.###.###.','....#....','..#.#.#..','...###...','....#....'],
+  ticket: ['.........','#########','#####.###','#########','.####.##.','#########','#####.###','#########','.........'],
   income: ['....#....','...###...','..#.#.#..','.#..#..#.','....#....','....#....','....#....','....#....','.........'],
   blank:  Array(9).fill('.........'),
 };
@@ -327,13 +331,15 @@ const RULES = [
   ['coffee',  /coffee|latte|espresso|caf[eé]|starbucks|dunkin|\btea\b|boba/],
   ['drinks',  /beer|\bbars?\b|wine|drinks?\b|cocktail|liquor|\bpub\b|brewery/],
   ['cart',    /grocer|supermarket|aldi|trader joe|whole foods|kroger|costco|wegmans|publix|safeway|market/],
-  ['health',  /pharm|\bcvs\b|walgreens|doctor|dentist|dental|medic|health|hospital|clinic|copay|prescription|\bpt\b|therap|wart|skin|derm|vitamin|\bpills?\b|urgent care|optom|glasses|contacts/],
+  ['health',  /pharm|\bcvs\b|walgreens|doctor|dentist|dental|medic|health|hospital|clinic|copay|prescription|\bpt\b|therap|wart|skin|derm|vitamin|\bpills?\b|urgent care|optom|glasses|contacts|\bhims\b|\bhers\b|nurx|teladoc|goodrx/],
   ['fitness', /\bgym\b|fitness|yoga|climb|workout|protein|peloton|pilates/],
+  ['ticket',  /ticket|concert|festival|\bshows?\b|\bgig\b|stubhub|ticketmaster|seatgeek|eventbrite|\baxs\b|museum/],
   ['game',    /game|\bgta\b|steam|xbox|playstation|\bps[45]\b|nintendo|arcade/],
-  ['movie',   /movie|cinema|film|theat(er|re)|netflix|hulu|disney|hbo|concert|ticket|museum/],
+  ['movie',   /movie|cinema|film|theat(er|re)|netflix|hulu|disney|hbo/],
   ['food',    /food|diner|lunch|dinner|breakfast|brunch|restaurant|pizza|burger|taco|sushi|take-?out|doordash|uber ?eats|grubhub|chipotle|mcdonald|snack|\beat|bagel|sandwich|ramen|wings/],
   ['shirt',   /shirt|costume|cloth|dress|pants|jeans|shoes?\b|sneaker|jacket|hoodie|socks?\b|apparel|uniqlo|zara|h&m/],
-  ['code',    /claude|chatgpt|openai|subscription|software|\bapps?\b|icloud|google one|adobe|github|domain|hosting|patreon|youtube|cloud/],
+  ['cloud',   /torbox|real-?debrid|google ?one|google storage|cloud|dropbox|onedrive|backblaze|\bvpn\b|mullvad|proton/],
+  ['code',    /claude|chatgpt|openai|subscription|software|\bapps?\b|adobe|github|domain|hosting|patreon|youtube/],
   ['tech',    /headphone|airpods|earbud|speaker|audio|music|spotify|cable|charger|phone|laptop|computer|\btech\b|electronic|keyboard|mouse|monitor/],
   ['car',     /\bgas\b|fuel|uber|lyft|taxi|\bcar\b|parking|toll|tires?\b|oil change|mechanic|transit|metro|subway|\bbus\b|train|registration/],
   ['home',    /\brent\b|mortgage|home|furniture|decor|apartment|clean|laundry|insurance|hardware|lowe'?s/],
@@ -519,7 +525,10 @@ function render() {
   const daysLeft = isCur ? dim - today + 1 : 0;
   $('daysv').textContent = String(daysLeft);
   let cal = '';
-  for (let d = 1; d <= dim; d++) cal += !isCur || d < today ? '#' : d === today ? 'r' : '.';
+  // Status colour: green while there's budget left, red at/over zero (or no budget yet).
+  const ok = left != null && left > 0;
+  $('hero').classList.toggle('ok', ok);
+  for (let d = 1; d <= dim; d++) cal += !isCur || d < today ? '#' : d === today ? (ok ? 'g' : 'r') : '.';
   $('cal').innerHTML = dots(cal.match(/.{1,7}/g).map(r => r.padEnd(7, ' ')));
 
   const pv = $('perdayv');

@@ -1,5 +1,5 @@
 // Network first, falling back to the cache when offline.
-const CACHE = 'spending-v4';
+const CACHE = 'spending-v5';
 const FILES = ['./', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
