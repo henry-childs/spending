@@ -43,6 +43,12 @@
   .dots .red { fill: var(--red); }
   .over .dots .on { fill: var(--red); }
 
+  /* LED boot-up: lit dots switch on column by column with a quick flicker */
+  #big, #meter { --lit: var(--dot-on); }
+  #big.over, .boot .red { --lit: var(--red); }
+  @keyframes led { 0% { fill: var(--dot-off); } 45% { fill: var(--lit); } 62% { fill: var(--dot-off); } 100% { fill: var(--lit); } }
+  .boot .on, .boot .red { animation: led .24s linear backwards; }
+
   header { display: flex; align-items: center; justify-content: space-between; min-height: 44px; margin: 2px 0 12px; }
   #monthbtn { display: flex; align-items: center; gap: 12px; padding: 10px 4px 10px 2px; }
   #month svg { height: 22px; width: auto; }
@@ -285,11 +291,14 @@ function dots(rows) {
   });
   return s + '</svg>';
 }
-function textRows(str, padX = 1, padY = 1) {
+// minW: total width in dots; narrower text is right-aligned (keeps digits steady while rolling).
+function textRows(str, padX = 1, padY = 1, minW = 0) {
   const glyphs = [...String(str).toUpperCase()].map(ch => FONT[ch === '−' ? '-' : ch] || FONT[' ']);
   const rows = Array.from({ length: 7 }, (_, y) => glyphs.map(g => g[y]).join('.'));
-  const side = '.'.repeat(padX), blank = '.'.repeat(rows[0].length + 2 * padX);
-  return [...Array(padY).fill(blank), ...rows.map(r => side + r + side), ...Array(padY).fill(blank)];
+  const extra = Math.max(0, minW - rows[0].length - 2 * padX);
+  const lpad = '.'.repeat(padX + extra), rpad = '.'.repeat(padX);
+  const blank = '.'.repeat(rows[0].length + 2 * padX + extra);
+  return [...Array(padY).fill(blank), ...rows.map(r => lpad + r + rpad), ...Array(padY).fill(blank)];
 }
 
 /* ---------- 9x9 item icons, picked automatically from the item type ---------- */
@@ -415,6 +424,62 @@ function meter(frac, over) {
   $('meter').innerHTML = dots([row, row]);
 }
 
+/* ---------- hero animations ---------- */
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let heroShown = null;   // what the hero last showed: { view, left }
+let rollRaf = 0;
+
+function drawHero(left, budget, minW = 0) {
+  $('big').innerHTML = dots(textRows(money(left), 1, 1, minW));
+  $('big').className = left < 0 ? 'over' : '';
+  const spent = budget - left;
+  const frac = budget > 0 ? spent / budget : (spent > 0 ? 1 : 0);
+  $('pct').textContent = `${Math.round(frac * 100)}% USED`;
+  meter(frac, left < 0);
+}
+
+// Countdown roll: when the remaining amount changes within the same month,
+// count from the old value to the new one instead of jumping.
+function showHero(left, budget) {
+  cancelAnimationFrame(rollRaf);
+  const prev = heroShown;
+  heroShown = { view, left };
+  if (!prev || prev.view !== view || prev.left == null || prev.left === left || reduceMotion.matches) {
+    drawHero(left, budget);
+    return;
+  }
+  const from = prev.left, to = left;
+  const width = s => textRows(s, 0, 0)[0].length;
+  const minW = Math.max(width(money(from)), width(money(to))) + 2;
+  const dur = Math.min(1400, 600 + Math.abs(to - from) / 100 * 3); // bigger changes roll a little longer
+  const t0 = performance.now();
+  const step = now => {
+    const t = Math.min(1, (now - t0) / dur);
+    if (t >= 1) { drawHero(to, budget); return; }
+    const eased = 1 - Math.pow(1 - t, 3);
+    drawHero(Math.round(from + (to - from) * eased), budget, minW);
+    rollRaf = requestAnimationFrame(step);
+  };
+  rollRaf = requestAnimationFrame(step);
+}
+
+// LED boot-up: light the big number column by column, then sweep the meter.
+let bootTimer = 0;
+function boot() {
+  if (reduceMotion.matches) return;
+  clearTimeout(bootTimer);
+  const parts = [[$('big'), 0, 16], [$('meter'), 260, 9]];  // [element, start ms, ms per column]
+  for (const [el, start, per] of parts) {
+    el.classList.remove('boot');
+    el.querySelectorAll('circle.on, circle.red').forEach(c => {
+      c.style.animationDelay = `${start + parseFloat(c.getAttribute('cx')) * per}ms`;
+    });
+    void el.offsetWidth; // restart the animation
+    el.classList.add('boot');
+  }
+  bootTimer = setTimeout(() => parts.forEach(([el]) => el.classList.remove('boot')), 1600);
+}
+
 function render() {
   const cur = thisMonth();
   // Lock in the current month's budget so later changes don't rewrite history.
@@ -434,18 +499,15 @@ function render() {
   const left = budget == null ? null : budget - spent;
 
   // Hero: remaining, in dot-matrix
-  const big = $('big');
   if (budget == null) {
-    big.innerHTML = dots(textRows('SET BUDGET'));
-    big.className = '';
+    cancelAnimationFrame(rollRaf);
+    heroShown = { view, left: null };
+    $('big').innerHTML = dots(textRows('SET BUDGET'));
+    $('big').className = '';
     $('pct').textContent = 'TAP';
     meter(0, false);
   } else {
-    big.innerHTML = dots(textRows(money(left)));
-    big.className = left < 0 ? 'over' : '';
-    const frac = budget > 0 ? spent / budget : (spent > 0 ? 1 : 0);
-    $('pct').textContent = `${Math.round(frac * 100)}% USED`;
-    meter(frac, left < 0);
+    showHero(left, budget);
   }
   $('hero').setAttribute('aria-label', budget == null ? 'Set monthly budget' : `${money(left)} left`);
 
@@ -597,7 +659,7 @@ function renderPicker() {
     meter.innerHTML = dots([(over ? 'r' : '#').repeat(lit) + '.'.repeat(N - lit)]);
     b.append(n, s, meter);
     b.setAttribute('aria-label', `${monthLabel(m)}, spent ${money(spent)}`);
-    b.onclick = () => { view = m; setPicker(false); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    b.onclick = () => { view = m; setPicker(false); render(); boot(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
     return b;
   }));
 }
@@ -608,7 +670,7 @@ function setPicker(open) {
 }
 $('caret').innerHTML = dots(['#####', ' ### ', '  #  ']);
 $('monthbtn').onclick = () => setPicker($('picker').hidden);
-$('nowbtn').onclick = () => { view = thisMonth(); setPicker(false); render(); };
+$('nowbtn').onclick = () => { view = thisMonth(); setPicker(false); render(); boot(); };
 
 /* ---------- backup / restore ---------- */
 const BACKUP_PREFIX = 'SPENDING1:';
@@ -662,9 +724,16 @@ $('add').addEventListener('submit', ev => {
 });
 
 // Roll over to the new month if the app is reopened after midnight.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+// Replay the LED boot-up when coming back after a while (iOS often resumes the app instead of reloading it).
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  render();
+  if (Date.now() - hiddenAt > 30000) boot();
+});
 
 render();
+boot();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
 </body>
